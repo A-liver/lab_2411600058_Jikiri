@@ -19,6 +19,8 @@ class AppServiceProvider extends ServiceProvider
         Paginator::useBootstrapFive();
         // Admin-only actions (transaction delete, stock adjustments)
         Gate::define('admin', fn (User $user) => $user->isAdmin());
+        // "Authorized users" for adjustments = admins and managers
+        Gate::define('manage-stock', fn (User $user) => $user->isAdmin() || $user->isManager());
         View::composer('layouts.app', function ($view) {
         $user = auth()->user();
 

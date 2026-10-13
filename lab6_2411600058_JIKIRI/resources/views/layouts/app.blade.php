@@ -17,70 +17,76 @@
             <a class="navbar-brand fw-bold" href="{{ route('dashboard') }}">
                 Restaurant Management
             </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-            <ul class="navbar-nav ms-auto align-items-lg-center">
 
-                {{-- Notification bell --}}
-                <li class="nav-item dropdown me-lg-2">
-                    <a class="nav-link position-relative" href="#" id="notifDropdown" role="button"
-                    data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
-                        <i class="bi bi-bell-fill fs-5"></i>
-                        <span id="notifBadge"
-                            class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger {{ $unreadNotificationsCount ? '' : 'd-none' }}">
-                            {{ $unreadNotificationsCount }}
-                        </span>
-                    </a>
+            {{-- Notification bell: outside the collapse so it stays visible on phones --}}
+            <div class="dropdown ms-auto me-2">
+                <a class="nav-link text-white position-relative px-2" href="#" id="notifDropdown" role="button"
+                data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" aria-label="Notifications">
+                    <i class="bi bi-bell-fill fs-5"></i>
+                    <span id="notifBadge"
+                        class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger {{ $unreadNotificationsCount ? '' : 'd-none' }}">
+                        {{ $unreadNotificationsCount }}
+                    </span>
+                </a>
 
-                    <ul class="dropdown-menu dropdown-menu-end p-0" style="min-width: 340px;" aria-labelledby="notifDropdown">
-                        <li class="d-flex justify-content-between align-items-center px-3 py-2 border-bottom">
-                            <strong>Notifications</strong>
-                            @if ($unreadNotificationsCount)
-                                <form method="POST" action="{{ route('notifications.readAll') }}">
-                                    @csrf
-                                    <button type="submit" class="btn btn-link btn-sm p-0">Mark all as read</button>
-                                </form>
-                            @endif
-                        </li>
-
-                        @forelse ($recentNotifications as $n)
-                            <li>
-                                <form method="POST" action="{{ route('notifications.read', $n->id) }}">
-                                    @csrf
-                                    <button type="submit"
-                                            class="dropdown-item text-wrap py-2 {{ $n->read_at ? 'text-muted' : 'fw-semibold bg-light' }}">
-                                        <div>{{ $n->data['message'] ?? 'Notification' }}</div>
-                                        <small class="text-muted">{{ $n->created_at->diffForHumans() }}</small>
-                                    </button>
-                                </form>
-                            </li>
-                        @empty
-                            <li class="px-3 py-3 text-center text-muted">No notifications</li>
-                        @endforelse
-                    </ul>
-                </li>
-
-                {{-- User dropdown --}}
-                <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle text-white" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                        <i class="bi bi-person-circle"></i>
-                        {{ auth()->user()->name }}
-                        <span class="badge bg-light text-primary ms-1">{{ ucfirst(auth()->user()->role) }}</span>
-                    </a>
-                    <ul class="dropdown-menu dropdown-menu-end">
-                        <li><a class="dropdown-item" href="{{ route('profile.edit') }}">Profile</a></li>
-                        <li><hr class="dropdown-divider"></li>
-                        <li>
-                            <form method="POST" action="{{ route('logout') }}">
+                <ul class="dropdown-menu dropdown-menu-end p-0 shadow" style="width: min(340px, 92vw);" aria-labelledby="notifDropdown">
+                    <li class="d-flex justify-content-between align-items-center px-3 py-2 border-bottom">
+                        <strong>Notifications</strong>
+                        @if ($unreadNotificationsCount)
+                            <form method="POST" action="{{ route('notifications.readAll') }}">
                                 @csrf
-                                <button type="submit" class="dropdown-item text-danger">Logout</button>
+                                <button type="submit" class="btn btn-link btn-sm p-0">Mark all as read</button>
+                            </form>
+                        @endif
+                    </li>
+
+                    @forelse ($recentNotifications as $n)
+                        <li>
+                            <form method="POST" action="{{ route('notifications.read', $n->id) }}">
+                                @csrf
+                                <button type="submit"
+                                        class="dropdown-item text-wrap py-2 {{ $n->read_at ? 'text-muted' : 'fw-semibold bg-light' }}">
+                                    <div>{{ $n->data['message'] ?? 'Notification' }}</div>
+                                    <small class="text-muted">{{ $n->created_at->diffForHumans() }}</small>
+                                </button>
                             </form>
                         </li>
-                    </ul>
-                </li>
-            </ul>
+                    @empty
+                        <li class="px-3 py-3 text-center text-muted">No notifications</li>
+                    @endforelse
+                </ul>
+            </div>
+
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
+                    aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse flex-grow-0" id="navbarNav">
+                <ul class="navbar-nav align-items-lg-center">
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle text-white" href="#" role="button"
+                        data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-person-circle"></i>
+                            {{ auth()->user()->name }}
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li class="px-3 py-2">
+                                <div class="fw-semibold">{{ auth()->user()->name }}</div>
+                                <div class="small text-muted">{{ auth()->user()->email }}</div>
+                                <span class="badge bg-secondary mt-1">{{ ucfirst(auth()->user()->role) }}</span>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{{ route('profile.edit') }}">Profile</a></li>
+                            <li>
+                                <form method="POST" action="{{ route('logout') }}">
+                                    @csrf
+                                    <button type="submit" class="dropdown-item text-danger">Logout</button>
+                                </form>
+                            </li>
+                        </ul>
+                    </li>
+                </ul>
             </div>
         </div>
     </nav>
@@ -106,6 +112,18 @@
                                 Transactions
                             </a>
                         </li>
+                        @can('manage-stock')
+                            <li class="nav-item">
+                                <a class="nav-link {{ request()->routeIs('adjustments.*') ? 'active' : '' }}" href="{{ route('adjustments.create') }}">
+                                    Adjust Stock
+                                </a>
+                            </li>
+                        @endcan
+                        @can('manage-stock')
+                            <li class="nav-item">
+                                <a class="nav-link {{ request()->routeIs('reports.*') ? 'active' : '' }}" href="{{ route('reports.index') }}">Reports</a>
+                            </li>
+                        @endcan
                         <li class="nav-item">
                             <a class="nav-link" href="{{ route('profile.edit') }}">Profile</a>
                         </li>

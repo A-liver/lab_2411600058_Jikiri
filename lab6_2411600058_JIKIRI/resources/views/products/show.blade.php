@@ -29,24 +29,70 @@
         </div>
 
         @if (isset($transactions) && $transactions->isNotEmpty())
-            <div class="card chart-card mt-3">
-                <div class="card-body">
-                    <h6 class="mb-3">Recent Inventory Transactions</h6>
-                    <table class="table table-sm mb-0">
-                        <thead><tr><th>Date</th><th>Type</th><th>Qty</th><th>Reference</th></tr></thead>
+        <div class="card chart-card mt-3">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="mb-0">Transaction History</h6>
+                    <div class="d-flex gap-2">
+                        <a href="{{ route('transactions.create', ['product_id' => $product->id]) }}" class="btn btn-sm btn-primary">+ Record Movement</a>
+                        @can('manage-stock')
+                            <a href="{{ route('adjustments.create', ['product_id' => $product->id]) }}" class="btn btn-sm btn-outline-warning">Adjust Stock</a>
+                        @endcan
+                    </div>
+                </div>
+
+                <form method="GET" action="{{ route('products.show', $product) }}" class="row g-2 align-items-end mb-3">
+                    <div class="col-auto">
+                        <label for="from" class="form-label small mb-0">From</label>
+                        <input type="date" id="from" name="from" class="form-control form-control-sm" value="{{ request('from') }}">
+                    </div>
+                    <div class="col-auto">
+                        <label for="to" class="form-label small mb-0">To</label>
+                        <input type="date" id="to" name="to" class="form-control form-control-sm" value="{{ request('to') }}">
+                    </div>
+                    <div class="col-auto d-flex gap-2">
+                        <button type="submit" class="btn btn-sm btn-primary">Filter</button>
+                        <a href="{{ route('products.show', $product) }}" class="btn btn-sm btn-outline-secondary">Reset</a>
+                    </div>
+                </form>
+
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Type</th>
+                                <th class="text-end">Qty</th>
+                                <th class="text-end">Balance</th>
+                                <th>Reference</th>
+                                <th>User</th>
+                            </tr>
+                        </thead>
                         <tbody>
-                            @foreach ($transactions as $t)
+                            @forelse ($transactions as $t)
+                                @php $signed = $t->signed_quantity; @endphp
                                 <tr>
-                                    <td>{{ $t->created_at->format('Y-m-d H:i') }}</td>
-                                    <td>{{ $t->type === 'stock_in' ? 'Stock In' : 'Stock Out' }}</td>
-                                    <td>{{ $t->quantity }}</td>
+                                    <td><a href="{{ route('transactions.show', $t) }}">{{ $t->created_at->format('Y-m-d H:i') }}</a></td>
+                                    <td>
+                                        <span class="badge bg-{{ $t->type_color }} {{ $t->type_color === 'warning' ? 'text-dark' : '' }}">{{ $t->type_label }}</span>
+                                    </td>
+                                    <td class="text-end fw-bold {{ $signed < 0 ? 'text-danger' : 'text-success' }}">
+                                        {{ $signed > 0 ? '+' : '' }}{{ $signed }}
+                                    </td>
+                                    <td class="text-end">{{ $t->balance_after ?? '—' }}</td>
                                     <td>{{ $t->reference_number ?: '—' }}</td>
+                                    <td>{{ $t->user->name ?? 'System' }}</td>
                                 </tr>
-                            @endforeach
+                            @empty
+                                <tr><td colspan="6" class="text-center text-muted py-3">No transactions for this period.</td></tr>
+                            @endforelse
                         </tbody>
                     </table>
                 </div>
+
+                <div class="mt-3">{{ $transactions->links() }}</div>
             </div>
+        </div>
         @endif
     </div>
 

@@ -7,6 +7,8 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\InventoryTransactionController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\Api\InventoryApiController;
+use App\Http\Controllers\StockAdjustmentController;
+use App\Http\Controllers\ReportController;
 Route::get('/', function () {
     return redirect()->route('login');
 });
@@ -36,6 +38,17 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/products/low-stock', [InventoryApiController::class, 'lowStock'])->name('products.lowStock');
         Route::get('/products/{product}', [InventoryApiController::class, 'product'])->name('products.show');
         Route::get('/transactions/recent', [InventoryApiController::class, 'recent'])->name('transactions.recent');
+    });
+
+    Route::middleware('can:manage-stock')->group(function () {
+    Route::get('/adjustments/create', [StockAdjustmentController::class, 'create'])->name('adjustments.create');
+    Route::post('/adjustments', [StockAdjustmentController::class, 'store'])->name('adjustments.store');
+    });
+    Route::middleware('can:manage-stock')->prefix('reports')->name('reports.')->group(function () {
+    Route::get('/', [ReportController::class, 'index'])->name('index');
+    Route::get('/movement', [ReportController::class, 'movement'])->name('movement');
+    Route::get('/low-stock', [ReportController::class, 'lowStock'])->name('lowStock');
+    Route::get('/valuation', [ReportController::class, 'valuation'])->name('valuation');
     });
 });
 

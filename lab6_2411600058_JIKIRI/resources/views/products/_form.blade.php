@@ -34,7 +34,10 @@
 
     <div class="col-md-6">
         <label class="form-label">Quantity in Stock</label>
-        <input type="number" min="0" name="quantity" value="{{ old('quantity', $p->quantity ?? 0) }}" class="form-control @error('quantity') is-invalid @enderror" required>
+        <input type="number" min="0" name="quantity" value="{{ old('quantity', $p->quantity ?? 0) }}" class="form-control @error('quantity') is-invalid @enderror" required @if ($p) readonly @endif>
+        <div class="form-text">
+            {{ $p ? 'Stock changes are made with Record Movement or Adjust Stock.' : 'Saved as the opening stock transaction.' }}
+        </div>
         @error('quantity') <div class="text-danger small mt-1">{{ $message }}</div> @enderror
     </div>
     <div class="col-md-6">

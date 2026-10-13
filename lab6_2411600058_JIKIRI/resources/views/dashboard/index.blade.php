@@ -111,12 +111,8 @@
         </div>
     </div>
 </div>
-
-<div class="card">
-        <div class="card-header">
-            <h5 class="mb-0">Recently Updated Products</h5>
-        </div>
-        <div class="card mb-4">
+      
+    <div class="card mb-4">
         <div class="card-header d-flex justify-content-between align-items-center">
             <h5 class="mb-0">Recent Transactions</h5>
             <a href="{{ route('transactions.index') }}" class="btn btn-sm btn-outline-primary">View all</a>
@@ -151,6 +147,10 @@
             </div>
         </div>
     </div>
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Recently Updated Products</h5>
+        </div>
     <div class="card-body">
         <div class="table-responsive">
             <table class="table table-striped table-hover">
@@ -170,7 +170,6 @@
             </table>
         </div>
     </div>
-</div>
 
 @push('scripts')
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>

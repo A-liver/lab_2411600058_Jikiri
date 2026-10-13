@@ -26,7 +26,7 @@ class InventoryTransactionResource extends JsonResource
                 'sku' => $this->product->sku,
                 'url' => route('products.show', $this->product),
             ]),
-            'user' => $this->whenLoaded('user', fn () => $this->user?->name ?? 'System'),
+            'user' => $this->user?->name ?? 'System',
         ];
     }
 }

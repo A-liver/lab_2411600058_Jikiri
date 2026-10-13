@@ -5,7 +5,10 @@
 
 @section('content')
 
-<div class="d-flex justify-content-end mb-3">
+<div class="d-flex justify-content-end gap-2 mb-3">
+    @can('manage-stock')
+        <a href="{{ route('adjustments.create') }}" class="btn btn-outline-warning">Adjust Stock</a>
+    @endcan
     <a href="{{ route('transactions.create') }}" class="btn btn-primary">+ Record Movement</a>
 </div>
 
