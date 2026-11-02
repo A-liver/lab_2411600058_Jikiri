@@ -1,0 +1,91 @@
+@extends('layouts.app')
+
+@section('title', 'Transactions')
+@section('page-title', 'Inventory Transactions')
+
+@section('content')
+
+<div class="d-flex justify-content-end gap-2 mb-3">
+    @can('manage-stock')
+        <a href="{{ route('adjustments.create') }}" class="btn btn-outline-warning">Adjust Stock</a>
+    @endcan
+    <a href="{{ route('transactions.create') }}" class="btn btn-primary">+ Record Movement</a>
+    <x-export-buttons dataset="transactions" />
+</div>
+
+<div class="card filter-card mb-4">
+    <div class="card-body">
+        <form method="GET" action="{{ route('transactions.index') }}">
+            <div class="row g-3 align-items-end">
+                <x-filters.select name="product_id" label="Product" :options="$products" :selected="request('product_id')" placeholder="All products" col-class="col-md-3" />
+                <x-filters.select name="type" label="Type" :options="$types" :selected="request('type')" />
+                <x-filters.select name="user_id" label="User" :options="$users" :selected="request('user_id')" placeholder="Everyone" />
+                <x-filters.date-range :from="request('from')" :to="request('to')" />
+                <div class="col-md-3">
+                    <label for="search" class="form-label">Reference number</label>
+                    <input type="text" id="search" name="search" class="form-control" value="{{ request('search') }}" placeholder="e.g. PO-2026...">
+                </div>
+                <div class="col-md-2 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary flex-fill">Apply</button>
+                    <a href="{{ route('transactions.index') }}" class="btn btn-outline-secondary flex-fill">Reset</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card chart-card">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Date / Time</th>
+                    <th>Product</th>
+                    <th>Type</th>
+                    <th class="text-end">Quantity</th>
+                    <th class="text-end">Balance</th>
+                    <th>Reference</th>
+                    <th>User</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @forelse ($transactions as $t)
+                    @php $signed = $t->signed_quantity; @endphp
+                    <tr>
+                        <td>{{ $t->created_at->format('Y-m-d H:i') }}</td>
+                        <td><a href="{{ route('products.show', $t->product_id) }}">{{ $t->product->name }}</a></td>
+                        <td>
+                            <span class="badge bg-{{ $t->type_color }} {{ $t->type_color === 'warning' ? 'text-dark' : '' }}">
+                                {{ $t->type_label }}
+                            </span>
+                        </td>
+                        <td class="text-end fw-bold {{ $signed < 0 ? 'text-danger' : 'text-success' }}">
+                            {{ $signed > 0 ? '+' : '' }}{{ $signed }}
+                        </td>
+                        <td class="text-end">{{ $t->balance_after ?? '—' }}</td>
+                        <td>{{ $t->reference_number ?: '—' }}</td>
+                        <td>{{ $t->user->name ?? 'System' }}</td>
+                        <td class="text-end">
+                            <a href="{{ route('transactions.show', $t) }}" class="btn btn-sm btn-outline-primary">View</a>
+                            @can('admin')
+                                <form method="POST" action="{{ route('transactions.destroy', $t) }}" class="d-inline"
+                                      onsubmit="return confirm('Delete this transaction and reverse its stock change?');">
+                                    @csrf
+                                    @method('DELETE')
+                                    <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                                </form>
+                            @endcan
+                        </td>
+                    </tr>
+                @empty
+                    <tr><td colspan="8" class="text-center text-muted py-4">No transactions found.</td></tr>
+                @endforelse
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="mt-3">{{ $transactions->links() }}</div>
+
+@endsection
