@@ -1,65 +1,124 @@
+/*
+ * Restaurant Inventory System
+ * Direction: a kitchen stock ledger. Warm paper background, olive ink, ruled lines instead of shadows.
+ * Type: IBM Plex Sans, chosen for dense tables and numbers that line up (tabular figures).
+ * Palette: olive (brand), dark olive (headers), cream (page), rust (single accent, chart fill only),
+ *          plus three status colors that are never used for decoration.
+ */
 :root {
+  --theme-primary: #606C38;
+  --theme-secondary: #283618;
+  --theme-background: #FEFAE0;
+  --theme-accent: #BC6C25;
+  --theme-text: #1d2312;
+  --theme-muted: #5c6355;
+  --line: rgba(40, 54, 24, 0.18);
+
+  --stock-ok: #2f6f46;
+  --stock-low: #8a5a00;
+  --stock-low-fill: #d99a1b;
+  --stock-out: #b02a37;
+
   --bs-primary: #606C38;
   --bs-primary-rgb: 96, 108, 56;
   --bs-secondary: #283618;
   --bs-secondary-rgb: 40, 54, 24;
+  --bs-success: #2f6f46;
+  --bs-success-rgb: 47, 111, 70;
+  --bs-danger: #b02a37;
+  --bs-danger-rgb: 176, 42, 55;
+  --bs-link-color-rgb: 96, 108, 56;
+  --bs-link-hover-color-rgb: 40, 54, 24;
 
-  --bs-success: #28a745;
-  --bs-info: #17a2b8;
-  --bs-warning: #f3a712;
-  --bs-danger: #dc3545;
+  /* One radius scale: 6px for every component, 4px for small controls. */
+  --bs-border-radius: 6px;
+  --bs-border-radius-lg: 6px;
+  --bs-border-radius-sm: 4px;
 
-  /* Custom Theme Colors */
-  --theme-primary: #606C38;
-  --theme-secondary: #283618;
-  --theme-accent: #DDA15E;
-  --theme-background: #FEFAE0;
-  --theme-light-accent: #BC6C25;
-  --theme-text: #000000;
+  --bs-body-font-family: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
 body {
   background-color: var(--theme-background);
   color: var(--theme-text);
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: var(--bs-body-font-family);
 }
 
-/* Login Page 
-.login-page {
-  background:linear-gradient(135deg, var(--theme-primary), var(--theme-secondary));
-  min-height: 100vh;/
+td, th, .stat-figure {
+  font-variant-numeric: tabular-nums;
 }
 
-.login-card {
-  border: none;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+.text-muted {
+  color: var(--theme-muted) !important;
 }
 
-.login-card .card-header {
-  background: linear-gradient(135deg, var(--theme-primary), var(--theme-secondary));
-  border-bottom: none;
+/* Page title: a double rule, like the head of a ledger page */
+.page-head {
+  border-bottom: 3px double var(--theme-primary);
 }
-*/
+
+.page-title {
+  color: var(--theme-secondary);
+  font-weight: 600;
+}
+
+/* Surfaces: flat, with a hairline instead of a shadow */
+.card,
+.stat-card,
+.chart-card,
+.filter-card,
+.auth-card {
+  border: 1px solid var(--line);
+  border-radius: var(--bs-border-radius);
+  box-shadow: none;
+  background-color: #ffffff;
+}
+
+.card-header {
+  background-color: rgba(96, 108, 56, 0.08);
+  border-bottom: 1px solid var(--line);
+}
+
+.card-header h5 {
+  color: var(--theme-secondary);
+  font-weight: 600;
+}
+
+/* Tables */
+.table thead th {
+  border-bottom: 2px solid var(--theme-primary);
+  color: var(--theme-secondary);
+  font-weight: 600;
+}
+
+.table-striped {
+  --bs-table-striped-bg: rgba(96, 108, 56, 0.06);
+}
+
+.topbar {
+  background-color: var(--theme-secondary);
+}
+
+.topbar .navbar-brand,
+.topbar .navbar-text {
+  color: #ffffff;
+}
+
 /* Sidebar */
 .sidebar {
   background-color: #ffffff;
-  border-right: 1px solid rgba(0, 0, 0, 0.1);
-  box-shadow: 2px 0 5px rgba(0, 0, 0, 0.05);
+  border-right: 1px solid var(--line);
 }
 
 .sidebar .nav-link {
   color: var(--theme-text);
-  border-radius: 8px;
+  border-radius: var(--bs-border-radius);
   padding: 12px 16px;
   margin-bottom: 4px;
-  transition: all 0.3s ease;
 }
 
 .sidebar .nav-link:hover {
-  background-color: var(--theme-light-accent);
-  color: var(--theme-text);
+  background-color: rgba(96, 108, 56, 0.12);
 }
 
 .sidebar .nav-link.active {
@@ -67,159 +126,141 @@ body {
   color: #ffffff;
 }
 
-.sidebar .nav-link.text-danger:hover {
-  background-color: #f8d7da;
-  color: #dc3545 !important;
+@media (min-width: 768px) {
+  .sidebar {
+    min-height: calc(100vh - 64px);
+  }
 }
 
-.stat-card {
-  border: none;
-  border-radius: 12px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
-}
-
-.stat-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
-}
-
-.stat-card .card-body {
-  padding: 1.5rem;
-}
-
+/* Dashboard figures */
 .stat-card .card-title {
   font-size: 0.9rem;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 0.5rem;
+  font-weight: 500;
+  margin-bottom: 0.25rem;
 }
 
-.stat-card .card-text {
-  font-size: 1.8rem;
+.stat-card .stat-figure {
+  font-size: 1.6rem;
+  font-weight: 600;
   margin-bottom: 0;
 }
 
-.shadow-hover {
-  transition: box-shadow 0.3s ease;
+.stat-card.is-low .stat-figure,
+.stat-card.is-out .stat-figure {
+  font-size: 1.9rem;
+  font-weight: 700;
 }
 
-.shadow-hover:hover {
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15) !important;
+/* The two figures someone has to act on are links and carry their status tint */
+.stat-link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
 }
 
-.border-accent {
-  border-left: 4px solid var(--theme-accent);
-}
-/*
-.border-primary-custom {
-  border-left: 4px solid var(--theme-primary);
+.stat-link:hover .card-title,
+.stat-link:focus-visible .card-title {
+  text-decoration: underline;
 }
 
-.border-success-custom {
-  border-left: 4px solid var(--bs-success);
+.stat-card.is-low {
+  background-color: rgba(217, 154, 27, 0.12);
+  border-color: var(--stock-low-fill);
 }
 
-.bg-gradient-primary {
-  background: linear-gradient(135deg, var(--theme-primary), var(--theme-secondary));
+.stat-card.is-out {
+  background-color: rgba(176, 42, 55, 0.08);
+  border-color: var(--stock-out);
 }
 
-.text-accent {
-  color: var(--theme-accent);
+.stat-card .stat-hint {
+  font-size: 0.8rem;
+  color: var(--theme-muted);
 }
 
-.text-primary-custom {
-  color: var(--theme-primary);
+.text-warning,
+.stat-low {
+  color: var(--stock-low) !important;
 }
-*/
+
+.text-success {
+  color: var(--stock-ok) !important;
+}
+
+.text-danger {
+  color: var(--stock-out) !important;
+}
+
+.chart-container {
+  position: relative;
+  height: 300px;
+}
+
+.chart-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  margin: 0;
+  text-align: center;
+  color: var(--theme-muted);
+}
+
+/* Buttons */
 .btn-primary {
   background-color: var(--theme-primary);
   border-color: var(--theme-primary);
 }
 
-.btn-primary:hover {
+.btn-primary:hover,
+.btn-primary:focus-visible {
   background-color: var(--theme-secondary);
   border-color: var(--theme-secondary);
 }
 
-.chart-container {
-    position: relative;
-    height: 300px;
-}
-@media (max-width: 768px) {
-  .sidebar {
-    min-height: auto !important;
-    max-height: auto !important;
-  }
-
-  .stat-card .card-text {
-    font-size: 1.4rem;
-  }
-
-  .chart-container {
-    height: 220px;
-  }
-
-  .filter-card .btn-group {
-    flex-wrap: wrap;
-  }
-
-  .filter-card .btn-group .btn {
-    flex: 1 1 25%;
-    font-size: 0.8rem;
-  }
+.btn-outline-warning {
+  color: var(--stock-low);
+  border-color: var(--stock-low);
 }
 
-/* Custom Scrollbar */
-::-webkit-scrollbar {
-  width: 8px;
+.btn-outline-warning:hover,
+.btn-outline-warning.active {
+  background-color: var(--stock-low);
+  border-color: var(--stock-low);
+  color: #ffffff;
 }
 
-::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 10px;
+.btn-outline-success {
+  color: var(--stock-ok);
+  border-color: var(--stock-ok);
 }
 
-::-webkit-scrollbar-thumb {
-  background: var(--theme-secondary);
-  border-radius: 10px;
+.btn-outline-success:hover,
+.btn-outline-success.active {
+  background-color: var(--stock-ok);
+  border-color: var(--stock-ok);
+  color: #ffffff;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: var(--theme-primary);
+.btn-outline-danger {
+  color: var(--stock-out);
+  border-color: var(--stock-out);
 }
 
-/* Custome Color */
-
-#greeting {
-    color: var(--theme-primary);
+.btn-outline-danger:hover,
+.btn-outline-danger.active {
+  background-color: var(--stock-out);
+  border-color: var(--stock-out);
+  color: #ffffff;
 }
 
-#activityTableBody{
-    color: var(--theme-secondary);
+/* Status labels */
+.badge {
+  border-radius: var(--bs-border-radius-sm);
+  font-weight: 500;
 }
 
-
-/* Chart cards */
-.chart-card {
-  border: none;
-  border-radius: 12px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
-  transition: box-shadow 0.3s ease;
-}
-
-.chart-card:hover {
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
-}
-
-/* Filter & search panel */
-.filter-card {
-  border: none;
-  border-radius: 12px;
-  background-color: #ffffff;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
-}
-
+/* Filter and search panel */
 .filter-card .btn-group .btn.active {
   background-color: var(--theme-primary);
   border-color: var(--theme-primary);
@@ -232,77 +273,60 @@ body {
   box-shadow: 0 0 0 0.2rem rgba(96, 108, 56, 0.25);
 }
 
-/* Inventory table row states */
-#inventoryTableBody tr {
-  transition: background-color 0.3s ease;
-}
-
+/* Inventory row states */
 .row-low-stock {
-  background-color: rgba(243, 167, 18, 0.12) !important;
+  background-color: rgba(217, 154, 27, 0.14) !important;
 }
 
 .row-out-of-stock {
-  background-color: rgba(220, 53, 69, 0.1) !important;
+  background-color: rgba(176, 42, 55, 0.09) !important;
 }
 
 .row-out-of-stock td {
-  color: #842029;
+  color: var(--stock-out);
 }
 
-/* Search highlight */
-#inventoryTableBody mark {
-  background-color: var(--theme-accent);
-  color: #000000;
-  padding: 0 2px;
-  border-radius: 3px;
-}
-
-/* Low stock alert banner */
+/* Alert banner */
 #lowStockAlert .alert {
-  border-left: 5px solid var(--bs-warning);
-  border-radius: 10px;
-  animation: alertSlideIn 0.4s ease;
+  border-radius: var(--bs-border-radius);
 }
 
 #lowStockAlert ul {
   padding-left: 1.1rem;
 }
 
-@keyframes alertSlideIn {
-  from {
-    opacity: 0;
-    transform: translateY(-8px);
+/* Sign-in and account pages */
+.auth-card {
+  max-width: 420px;
+  width: 100%;
+  overflow: hidden;
+}
+
+.auth-card .auth-header {
+  background-color: var(--theme-secondary);
+  color: #ffffff;
+}
+
+/* Small screens: the sidebar becomes a row of links, tap targets reach 44px */
+@media (max-width: 767.98px) {
+  .sidebar {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    padding: 0.5rem !important;
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+
+  .sidebar .nav {
+    flex-direction: row !important;
+    flex-wrap: wrap;
+    gap: 4px;
   }
-}
 
-/* Export button */
-#exportCsvBtn {
-  transition: transform 0.15s ease;
-}
+  .sidebar .nav-link {
+    margin-bottom: 0;
+  }
 
-#exportCsvBtn:hover {
-  transform: translateY(-2px);
-}
-
-/* Toast notifications for real-time simulation */
-#toastContainer .toast {
-  border-radius: 10px;
-}
-
-/* Loading spinner container */
-#inventoryLoading .spinner-border {
-  width: 3rem;
-  height: 3rem;
-}
-
-/* Responsive tweaks for charts/filters on small screens */
-@media (max-width: 768px) {
   .chart-container {
-    height: 220px;
+    height: 240px;
   }
 
   .filter-card .btn-group {
@@ -311,6 +335,13 @@ body {
 
   .filter-card .btn-group .btn {
     flex: 1 1 25%;
-    font-size: 0.8rem;
   }
+}
+
+.table .btn-sm {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }

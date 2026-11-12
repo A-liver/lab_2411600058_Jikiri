@@ -11,17 +11,29 @@
             <div class="row g-3 align-items-end">
                 <div class="col-md-3">
                     <label for="categoryFilter" class="form-label">Category</label>
-                    <select id="categoryFilter" name="category" class="form-select" onchange="this.form.submit()">
+                    <select id="categoryFilter" name="category" class="form-select">
                         <option value="all">All Categories</option>
                         @foreach ($categories as $category)
-                            <option value="{{ $category }}" {{ request('category') === $category ? 'selected' : '' }}>
-                                {{ $category }}
+                            <option value="{{ $category->id }}" {{ (string) request('category') === (string) $category->id ? 'selected' : '' }}>
+                                {{ $category->name }}
                             </option>
                         @endforeach
                     </select>
                 </div>
 
                 <div class="col-md-3">
+                    <label for="brandFilter" class="form-label">Brand</label>
+                    <select id="brandFilter" name="brand" class="form-select">
+                        <option value="all">All Brands</option>
+                        @foreach ($brands as $brand)
+                            <option value="{{ $brand->id }}" {{ (string) request('brand') === (string) $brand->id ? 'selected' : '' }}>
+                                {{ $brand->name }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+
+                <div class="col-md-4">
                     <label class="form-label d-block">Stock Status</label>
                     <div class="btn-group w-100" role="group" aria-label="Stock status filter">
                         @foreach (['all' => 'All', 'in-stock' => 'In', 'low-stock' => 'Low', 'out-of-stock' => 'Out'] as $value => $label)
@@ -37,18 +49,6 @@
                     </div>
                 </div>
 
-                <div class="col-md-2">
-                    <label for="minPriceFilter" class="form-label">Min Price</label>
-                    <input type="number" min="0" step="0.01" name="min_price" id="minPriceFilter"
-                           class="form-control" placeholder="0.00" value="{{ request('min_price') }}">
-                </div>
-
-                <div class="col-md-2">
-                    <label for="maxPriceFilter" class="form-label">Max Price</label>
-                    <input type="number" min="0" step="0.01" name="max_price" id="maxPriceFilter"
-                           class="form-control" placeholder="0.00" value="{{ request('max_price') }}">
-                </div>
-
                 <div class="col-md-2 d-flex gap-2">
                     <button type="submit" class="btn btn-primary flex-fill">Apply</button>
                     <a href="{{ route('products.index') }}" class="btn btn-outline-secondary flex-fill">Reset</a>
@@ -58,17 +58,27 @@
             <hr>
 
             <div class="row g-3 align-items-end">
-                <div class="col-md-8">
+                <div class="col-md-2">
+                    <label for="minPriceFilter" class="form-label">Min Price</label>
+                    <input type="number" min="0" step="0.01" name="min_price" id="minPriceFilter"
+                           class="form-control" placeholder="0.00" value="{{ request('min_price') }}">
+                </div>
+                <div class="col-md-2">
+                    <label for="maxPriceFilter" class="form-label">Max Price</label>
+                    <input type="number" min="0" step="0.01" name="max_price" id="maxPriceFilter"
+                           class="form-control" placeholder="0.00" value="{{ request('max_price') }}">
+                </div>
+                <div class="col-md-5">
                     <label for="productSearch" class="form-label">Search by name or SKU</label>
                     <div class="input-group">
-                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <span class="input-group-text"><i class="bi bi-search" aria-hidden="true"></i></span>
                         <input type="text" id="productSearch" name="search" class="form-control"
-                               placeholder="e.g. Chicken, INV-005..." value="{{ request('search') }}">
+                               placeholder="e.g. Chicken, INV-005" value="{{ request('search') }}">
                     </div>
                 </div>
-                <div class="col-md-4 text-md-end">
+                <div class="col-md-3 text-md-end">
                     <a href="{{ route('products.export', request()->query()) }}" class="btn btn-outline-primary" id="exportCsvBtn">
-                        <i class="bi bi-download me-1"></i> Export to CSV
+                        <i class="bi bi-download me-1" aria-hidden="true"></i> Export to CSV
                     </a>
                 </div>
             </div>
@@ -93,10 +103,11 @@
         <div class="table-responsive">
             <table class="table table-striped table-hover align-middle">
                 <thead>
-                    <tr class="border-accent">
+                    <tr>
                         <th>SKU</th>
                         <th>Product</th>
                         <th>Category</th>
+                        <th>Brand</th>
                         <th>Qty</th>
                         <th>Unit Price</th>
                         <th>Total Value</th>
@@ -111,7 +122,8 @@
                         <tr class="{{ $status === 'low-stock' ? 'row-low-stock' : ($status === 'out-of-stock' ? 'row-out-of-stock' : '') }}">
                             <td>{!! highlight_match($product->sku, request('search')) !!}</td>
                             <td>{!! highlight_match($product->name, request('search')) !!}</td>
-                            <td>{{ $product->category }}</td>
+                            <td>{{ $product->category?->name }}</td>
+                            <td>{{ $product->brand?->name }}</td>
                             <td>{{ $product->quantity }}</td>
                             <td>${{ number_format($product->unit_price, 2) }}</td>
                             <td>${{ number_format($product->quantity * $product->unit_price, 2) }}</td>
@@ -126,18 +138,18 @@
                             </td>
                             <td>{{ $product->supplier }}</td>
                             <td class="text-end">
-                                <a href="{{ route('products.show', $product) }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-eye"></i></a>
-                                <a href="{{ route('products.edit', $product) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
+                                <a href="{{ route('products.show', $product) }}" class="btn btn-sm btn-outline-secondary" title="View" aria-label="View {{ $product->name }}"><i class="bi bi-eye" aria-hidden="true"></i></a>
+                                <a href="{{ route('products.edit', $product) }}" class="btn btn-sm btn-outline-primary" title="Edit" aria-label="Edit {{ $product->name }}"><i class="bi bi-pencil" aria-hidden="true"></i></a>
                                 <form method="POST" action="{{ route('products.destroy', $product) }}" class="d-inline"
-                                      onsubmit="return confirm('Delete {{ $product->name }}?');">
+                                      data-confirm="Delete {{ $product->name }}?" onsubmit="return confirm(this.dataset.confirm);">
                                     @csrf
                                     @method('DELETE')
-                                    <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete" aria-label="Delete {{ $product->name }}"><i class="bi bi-trash" aria-hidden="true"></i></button>
                                 </form>
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="9" class="text-center text-muted py-4">No products match the current filters/search.</td></tr>
+                        <tr><td colspan="10" class="text-center text-muted py-4">No products match the current filters/search.</td></tr>
                     @endforelse
                 </tbody>
             </table>

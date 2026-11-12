@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Product extends Model
 {
@@ -10,7 +12,8 @@ class Product extends Model
         'name',
         'sku',
         'description',
-        'category',
+        'category_id',
+        'brand_id',
         'quantity',
         'reorder_level',
         'unit_price',
@@ -23,7 +26,17 @@ class Product extends Model
         'unit_price' => 'decimal:2',
     ];
 
-    public function transactions()
+    public function category(): BelongsTo
+    {
+        return $this->belongsTo(Category::class);
+    }
+
+    public function brand(): BelongsTo
+    {
+        return $this->belongsTo(Brand::class);
+    }
+
+    public function transactions(): HasMany
     {
         return $this->hasMany(InventoryTransaction::class);
     }
@@ -40,5 +53,4 @@ class Product extends Model
 
         return 'in-stock';
     }
-    
 }
