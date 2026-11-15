@@ -4,13 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\Brand;
 use App\Models\Category;
-use App\Models\InventoryTransaction;
 use App\Models\Product;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class ProductController extends Controller
@@ -66,14 +63,7 @@ class ProductController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $validated = $this->validateProduct($request);
-
-        DB::transaction(function () use ($validated, $request) {
-            $product = Product::create($validated);
-
-            if ($product->quantity > 0) {
-                $this->recordMovement($product, 'stock_in', $product->quantity, 'Opening stock', $request);
-            }
-        });
+        Product::create($validated);
 
         return redirect()
             ->route('products.index')
@@ -84,67 +74,21 @@ class ProductController extends Controller
     {
         $product->load(['category', 'brand']);
 
-        $transactions = $product->transactions()->with('user')->latest()->limit(10)->get();
-
-        return view('products.show', compact('product', 'transactions'));
+        return view('products.show', compact('product'));
     }
 
     public function edit(Product $product): View
     {
-        $transactions = $product->transactions()->with('user')->latest()->limit(5)->get();
-
-        return view('products.edit', ['product' => $product, 'transactions' => $transactions] + $this->formOptions());
+        return view('products.edit', ['product' => $product] + $this->formOptions());
     }
 
     public function update(Request $request, Product $product): RedirectResponse
     {
-        // Quantity changes go through adjustStock() so every change has a reason and a user.
-        $product->update($this->validateProduct($request, $product->id, false));
+        $product->update($this->validateProduct($request, $product->id, true));
 
         return redirect()
             ->route('products.index')
             ->with('success', "Product \"{$product->name}\" was updated.");
-    }
-
-    public function adjustStock(Request $request, Product $product): RedirectResponse
-    {
-        $validated = $request->validate([
-            'type' => ['required', 'in:stock_in,stock_out'],
-            'quantity' => ['required', 'integer', 'min:1', 'max:1000000'],
-            'reference' => ['nullable', 'string', 'max:255'],
-        ], [
-            'type.required' => 'Choose Stock In or Stock Out.',
-            'quantity.required' => 'Enter how many units to add or remove.',
-            'quantity.min' => 'The quantity must be at least 1.',
-        ]);
-
-        DB::transaction(function () use ($validated, $product, $request) {
-            $current = Product::whereKey($product->id)->lockForUpdate()->firstOrFail();
-
-            if ($validated['type'] === 'stock_out' && $validated['quantity'] > $current->quantity) {
-                throw ValidationException::withMessages([
-                    'quantity' => "Only {$current->quantity} in stock, so you cannot remove {$validated['quantity']}.",
-                ]);
-            }
-
-            $validated['type'] === 'stock_in'
-                ? $current->increment('quantity', $validated['quantity'])
-                : $current->decrement('quantity', $validated['quantity']);
-
-            $this->recordMovement(
-                $current,
-                $validated['type'],
-                (int) $validated['quantity'],
-                $validated['reference'] ?: 'Manual adjustment',
-                $request
-            );
-        });
-
-        $verb = $validated['type'] === 'stock_in' ? 'added to' : 'removed from';
-
-        return redirect()
-            ->route('products.edit', $product)
-            ->with('success', "{$validated['quantity']} unit(s) {$verb} {$product->name}.");
     }
 
     public function destroy(Product $product): RedirectResponse
@@ -163,17 +107,6 @@ class ProductController extends Controller
             'categories' => Category::orderBy('name')->get(['id', 'name']),
             'brands' => Brand::orderBy('name')->get(['id', 'name']),
         ];
-    }
-
-    private function recordMovement(Product $product, string $type, int $quantity, string $reference, Request $request): void
-    {
-        InventoryTransaction::create([
-            'product_id' => $product->id,
-            'user_id' => $request->user()?->id,
-            'type' => $type,
-            'quantity' => $quantity,
-            'reference' => $reference,
-        ]);
     }
 
     private function filteredQuery(Request $request): Builder

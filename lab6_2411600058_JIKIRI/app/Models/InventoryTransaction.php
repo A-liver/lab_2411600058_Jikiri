@@ -2,36 +2,24 @@
 
 namespace App\Models;
 
+use App\Observers\InventoryTransactionObserver;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use App\Observers\InventoryTransactionObserver;
-use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Support\Facades\DB;
+use App\Models\Transaction;
 
-#[ObservedBy([InventoryTransactionObserver::class])]
+#[ObservedBy(InventoryTransactionObserver::class)]
 class InventoryTransaction extends Model
 {
     public const TYPE_IN = 'stock_in';
     public const TYPE_OUT = 'stock_out';
     public const TYPE_ADJUSTMENT = 'adjustment';
-
-    public const ADJUSTMENT_REASONS = [
-        'physical_count' => 'Physical count discrepancy',
-        'damaged'        => 'Damaged goods',
-        'theft_loss'     => 'Theft / loss',
-        'system_error'   => 'System error',
-    ];
+    public const TYPES = [self::TYPE_IN, self::TYPE_OUT, self::TYPE_ADJUSTMENT];
 
     protected $fillable = [
-        'product_id',
-        'user_id',
-        'type',
-        'quantity',
-        'balance_after',
-        'reference_number',
-        'reason',
-        'notes',
+        'product_id', 'user_id', 'type', 'quantity', 'balance_after', 'reference', 'notes',
     ];
 
     protected $casts = [
@@ -39,30 +27,15 @@ class InventoryTransaction extends Model
         'balance_after' => 'integer',
     ];
 
-    /** Valid transaction types, for validation rules and form dropdowns. */
-    public static function types(): array
-    {
-        return [
-            self::TYPE_IN => 'Stock In',
-            self::TYPE_OUT => 'Stock Out',
-            self::TYPE_ADJUSTMENT => 'Adjustment',
-        ];
-    }
-
-    // ---------- Relationships ----------
-
     public function product(): BelongsTo
     {
-        return $this->belongsTo(Product::class);
+        return $this->belongsTo(Product::class)->withTrashed();
     }
 
-    /** The user who performed (is accountable for) the movement. */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
-
-    // ---------- Query scopes ----------
 
     public function scopeStockIn(Builder $query): Builder
     {
@@ -74,40 +47,54 @@ class InventoryTransaction extends Model
         return $query->where('type', self::TYPE_OUT);
     }
 
-    public function scopeAdjustments(Builder $query): Builder
-    {
-        return $query->where('type', self::TYPE_ADJUSTMENT);
-    }
-
     public function scopeRecent(Builder $query): Builder
     {
-        return $query->orderByDesc('created_at')->orderByDesc('id');
+        return $query->latest()->latest('id'); // id breaks ties inside the same second
     }
 
-    // ---------- Accessors ----------
-
-    /** Effect on stock: negative for stock-out, as-stored for stock-in/adjustment. */
-    public function getSignedQuantityAttribute(): int
-    {
-        return $this->type === self::TYPE_OUT ? -$this->quantity : $this->quantity;
-    }
-
-    public function getTypeLabelAttribute(): string
-    {
-        return self::types()[$this->type] ?? ucfirst(str_replace('_', ' ', $this->type));
-    }
-    public static function record(array $data): self
-    {
-    return DB::transaction(fn () => static::create($data));
-    }
-
-    /** Bootstrap badge colour for the type. */
-    public function getTypeColorAttribute(): string
+    /** Signed effect on stock: in = +, out = -, adjustment is already signed. */
+    public function delta(): int
     {
         return match ($this->type) {
-            self::TYPE_IN => 'success',
-            self::TYPE_OUT => 'danger',
-            default => 'warning',
+            self::TYPE_IN => abs($this->quantity),
+            self::TYPE_OUT => -abs($this->quantity),
+            default => $this->quantity,
         };
+    }
+    public function getTypeLabelAttribute(): string
+    {
+        return match ($this->type) {
+            self::TYPE_IN => 'Stock In',
+            self::TYPE_OUT => 'Stock Out',
+            default => 'Adjustment',
+        };
+    }
+
+    public function getTypeColorAttribute(): string
+    {
+        return 'movement';
+    }
+
+    /**
+     * The only way to move stock. Insert + stock update succeed or fail together.
+     *
+     * @throws \App\Exceptions\InsufficientStockException
+     */
+    public static function record(
+        Product|int $product,
+        string $type,
+        int $quantity,
+        ?string $reference = null,
+        ?string $notes = null,
+        ?int $userId = null,
+    ): self {
+        return DB::transaction(fn () => self::create([
+            'product_id' => $product instanceof Product ? $product->id : $product,
+            'user_id' => $userId ?? auth()->id(),
+            'type' => $type,
+            'quantity' => $quantity,
+            'reference' => $reference,
+            'notes' => $notes,
+        ]));
     }
 }

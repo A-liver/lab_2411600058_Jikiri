@@ -76,27 +76,6 @@
     @endif
 </div>
 
-<div class="row mb-4">
-    <div class="col-lg-6 mb-3">
-        <div class="card chart-card h-100">
-            <div class="card-body">
-                <div class="chart-container">
-                    <canvas id="stockStatusChart" role="img" aria-label="Doughnut chart of how many products are in stock, low on stock and out of stock. The same counts are in the figures above."></canvas>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-lg-6 mb-3">
-        <div class="card chart-card h-100">
-            <div class="card-body">
-                <div class="chart-container">
-                    <canvas id="topProductsChart" role="img" aria-label="Bar chart of the ten products with the highest stock value."></canvas>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
 <div class="row g-4 mb-4">
     <div class="col-lg-6">
         @include('dashboard._breakdown', ['title' => 'Stock by Category', 'rows' => $stockByCategory, 'filter' => 'category', 'label' => 'Category'])
@@ -134,48 +113,5 @@
         </div>
     </div>
 </div>
-
-@push('scripts')
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
-
-<script>
-    // Minimal shim: gives Lab 4's charts.js a DataManager to talk to,
-    // backed by real Laravel/MySQL data instead of products.json.
-    window.DataManager = (function () {
-        const products = @json($productsForCharts);
-
-        function getStockStatus(product) {
-            if (product.quantity <= 0) return 'out-of-stock';
-            if (product.quantity <= product.reorderLevel) return 'low-stock';
-            return 'in-stock';
-        }
-
-        function getProducts() {
-            return products;
-        }
-
-        function getStockStatistics() {
-            const totalProducts = products.length;
-            const lowStockCount = products.filter(p => getStockStatus(p) === 'low-stock').length;
-            const outOfStockCount = products.filter(p => getStockStatus(p) === 'out-of-stock').length;
-            return { totalProducts, lowStockCount, outOfStockCount };
-        }
-
-        function getTopProductsByValue(n = 5) {
-            return [...products]
-                .sort((a, b) => b.quantity * b.unitPrice - a.quantity * a.unitPrice)
-                .slice(0, n);
-        }
-
-        return { getProducts, getStockStatus, getStockStatistics, getTopProductsByValue };
-    })();
-</script>
-
-<script src="{{ asset('JavaScript/charts.js') }}"></script>
-
-<script>
-    document.addEventListener('DOMContentLoaded', renderCharts);
-</script>
-@endpush
 
 @endsection

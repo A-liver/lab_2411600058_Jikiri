@@ -7,11 +7,10 @@ use RuntimeException;
 
 class InsufficientStockException extends RuntimeException
 {
-    public function __construct(public Product $product, public int $requested)
+    public function __construct(public readonly Product $product, public readonly int $requested)
     {
         parent::__construct(
-            "Insufficient stock for \"{$product->name}\": requested {$requested}, "
-            . "only {$product->quantity} available."
+            "Only {$product->quantity} unit(s) of {$product->name} in stock, so you cannot remove {$requested}."
         );
     }
 }

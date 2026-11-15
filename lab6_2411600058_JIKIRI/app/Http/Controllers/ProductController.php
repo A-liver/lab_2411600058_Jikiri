@@ -2,43 +2,50 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Brand;
+use App\Models\Category;
 use App\Models\InventoryTransaction;
 use App\Models\Product;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Exceptions\InsufficientStockException;
 use Illuminate\View\View;
 
 class ProductController extends Controller
 {
-    /**
-     * Display a listing of the products.
-     */
     public function index(Request $request): View
     {
-        $query = $this->filteredQuery($request);
+        $products = $this->filteredQuery($request)
+            ->with(['category', 'brand'])
+            ->orderBy('name')
+            ->paginate(15)
+            ->withQueryString();
 
-        $products = $query->orderBy('name')->paginate(15)->withQueryString();
-        $categories = Product::select('category')->distinct()->orderBy('category')->pluck('category');
-
-        return view('products.index', compact('products', 'categories'));
+        return view('products.index', [
+            'products' => $products,
+            'categories' => Category::orderBy('name')->get(['id', 'name']),
+            'brands' => Brand::orderBy('name')->get(['id', 'name']),
+        ]);
     }
 
     public function export(Request $request)
     {
-        $products = $this->filteredQuery($request)->orderBy('name')->get();
+        $products = $this->filteredQuery($request)->with(['category', 'brand'])->orderBy('name')->get();
 
         $filename = 'inventory_report_' . now()->format('Y-m-d') . '.csv';
 
         return response()->streamDownload(function () use ($products) {
             $handle = fopen('php://output', 'w');
-            fputcsv($handle, ['SKU', 'Name', 'Category', 'Quantity', 'Unit Price', 'Total Value', 'Supplier', 'Stock Status']);
+            fputcsv($handle, ['SKU', 'Name', 'Category', 'Brand', 'Quantity', 'Unit Price', 'Total Value', 'Supplier', 'Stock Status']);
 
             foreach ($products as $p) {
                 fputcsv($handle, [
                     $p->sku,
                     $p->name,
-                    $p->category,
+                    $p->category?->name,
+                    $p->brand?->name,
                     $p->quantity,
                     number_format($p->unit_price, 2),
                     number_format($p->quantity * $p->unit_price, 2),
@@ -48,15 +55,131 @@ class ProductController extends Controller
             }
 
             fclose($handle);
-        }, $filename);
+        }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
     }
 
-    private function filteredQuery(Request $request)
+    public function create(): View
+    {
+        return view('products.create', $this->formOptions());
+    }
+
+    public function store(Request $request): RedirectResponse
+    {
+        $validated = $this->validateProduct($request);
+
+        DB::transaction(function () use ($validated, $request) {
+            $opening = (int) $validated['quantity'];
+
+            // start at 0: the ledger is now the only thing allowed to add stock
+            $product = Product::create(array_merge($validated, ['quantity' => 0]));
+
+            if ($opening > 0) {
+                InventoryTransaction::record(
+                    $product, InventoryTransaction::TYPE_IN, $opening, 'Opening stock', null, $request->user()?->id
+                );
+            }
+        });
+
+        return redirect()
+            ->route('products.index')
+            ->with('success', "Product \"{$validated['name']}\" was added.");
+    }
+
+    public function show(Request $request, Product $product): View
+    {
+        $request->validate([
+            'from' => ['nullable', 'date'],
+            'to' => ['nullable', 'date', 'after_or_equal:from'],
+        ]);
+
+        $product->load(['category', 'brand']);
+
+        $history = $product->transactions()
+            ->with('user')
+            ->when($request->filled('from'), fn ($q) => $q->whereDate('created_at', '>=', $request->input('from')))
+            ->when($request->filled('to'), fn ($q) => $q->whereDate('created_at', '<=', $request->input('to')))
+            ->recent()
+            ->paginate(15)
+            ->withQueryString();
+
+        return view('products.show', compact('product', 'history'));
+    }
+
+    public function edit(Product $product): View
+    {
+        return view('products.edit', ['product' => $product] + $this->formOptions());
+    }
+
+    public function update(Request $request, Product $product): RedirectResponse
+    {
+        // Quantity changes go through adjustStock() so every change has a reason and a user.
+        $product->update($this->validateProduct($request, $product->id, false));
+
+        return redirect()
+            ->route('products.index')
+            ->with('success', "Product \"{$product->name}\" was updated.");
+    }
+
+    public function adjustStock(Request $request, Product $product): RedirectResponse
+    {
+        $validated = $request->validate([
+            'type' => ['required', 'in:stock_in,stock_out'],
+            'quantity' => ['required', 'integer', 'min:1', 'max:1000000'],
+            'reference' => ['nullable', 'string', 'max:255'],
+        ], [
+            'type.required' => 'Choose Stock In or Stock Out.',
+            'quantity.required' => 'Enter how many units to add or remove.',
+            'quantity.min' => 'The quantity must be at least 1.',
+        ]);
+
+        try {
+            InventoryTransaction::record(
+                $product,
+                $validated['type'],
+                (int) $validated['quantity'],
+                ($validated['reference'] ?? null) ?: 'Manual adjustment',
+                null,
+                $request->user()?->id,
+            );
+        } catch (InsufficientStockException $e) {
+            return back()->withInput()->withErrors(['quantity' => $e->getMessage()]);
+        }
+
+        $verb = $validated['type'] === 'stock_in' ? 'added to' : 'removed from';
+
+        return redirect()
+            ->route('products.edit', $product)
+            ->with('success', "{$validated['quantity']} unit(s) {$verb} {$product->name}.");
+    }
+
+    public function destroy(Product $product): RedirectResponse
+    {
+        $name = $product->name;
+        $product->delete();
+
+        return redirect()
+            ->route('products.index')
+            ->with('success', "Product \"{$name}\" was deleted.");
+    }
+
+    private function formOptions(): array
+    {
+        return [
+            'categories' => Category::orderBy('name')->get(['id', 'name']),
+            'brands' => Brand::orderBy('name')->get(['id', 'name']),
+        ];
+    }
+
+    private function filteredQuery(Request $request): Builder
     {
         $query = Product::query();
 
         if ($request->filled('category') && $request->input('category') !== 'all') {
-            $query->where('category', $request->input('category'));
+            $query->where('category_id', (int) $request->input('category'));
+        }
+
+        if ($request->filled('brand') && $request->input('brand') !== 'all') {
+            $query->where('brand_id', (int) $request->input('brand'));
         }
 
         if ($request->filled('stock_status') && $request->input('stock_status') !== 'all') {
@@ -86,125 +209,32 @@ class ProductController extends Controller
         return $query;
     }
 
-    public function create(): View
+    private function validateProduct(Request $request, ?int $ignoreId = null, bool $withQuantity = true): array
     {
-        return view('products.create');
-    }
-
-    /**
-     * Store a newly created product. The starting quantity is recorded as an
-     * opening-stock transaction so every unit has a ledger entry behind it.
-     */
-    public function store(Request $request): RedirectResponse
-    {
-        $validated = $this->validateProduct($request);
-        $openingStock = (int) $validated['quantity'];
-
-        DB::transaction(function () use ($validated, $openingStock) {
-            $product = Product::create([...$validated, 'quantity' => 0]);
-
-            if ($openingStock > 0) {
-                InventoryTransaction::record([
-                    'product_id' => $product->id,
-                    'user_id' => auth()->id(),
-                    'type' => InventoryTransaction::TYPE_IN,
-                    'quantity' => $openingStock,
-                    'reference_number' => 'OPENING-STOCK',
-                    'notes' => 'Initial stock when the product was created.',
-                ]);
-            }
-        });
-
-        return redirect()
-            ->route('products.index')
-            ->with('success', "Product \"{$validated['name']}\" was added successfully.");
-    }
-
-    /**
-     * Display the specified product with its transaction history.
-     */
-    public function show(Request $request, Product $product): View
-    {
-        $filters = $request->validate([
-            'from' => ['nullable', 'date'],
-            'to' => ['nullable', 'date', 'after_or_equal:from'],
-        ]);
-
-        $transactions = $product->transactions()
-            ->with('user')
-            ->when($filters['from'] ?? null, fn ($q, $v) => $q->whereDate('created_at', '>=', $v))
-            ->when($filters['to'] ?? null, fn ($q, $v) => $q->whereDate('created_at', '<=', $v))
-            ->recent()
-            ->paginate(15)
-            ->withQueryString();
-
-        return view('products.show', compact('product', 'transactions'));
-    }
-
-    /**
-     * Show the form for editing the specified product.
-     */
-    public function edit(Product $product): View
-    {
-        return view('products.edit', compact('product'));
-    }
-
-    /**
-     * Update the specified product. Quantity is ignored here: stock only
-     * changes through transactions and adjustments (audit trail).
-     */
-    public function update(Request $request, Product $product): RedirectResponse
-    {
-        $validated = $this->validateProduct($request, $product->id);
-
-        unset($validated['quantity']);
-
-        $product->update($validated);
-
-        return redirect()
-            ->route('products.index')
-            ->with('success', "Product \"{$product->name}\" was updated successfully.");
-    }
-
-    /**
-     * Remove the specified product. Products with stock history are kept
-     * so the audit trail survives.
-     */
-    public function destroy(Product $product): RedirectResponse
-    {
-        if ($product->transactions()->exists()) {
-            return back()->withErrors([
-                'delete' => "\"{$product->name}\" has stock movement history and cannot be deleted.",
-            ]);
-        }
-
-        $name = $product->name;
-        $product->delete();
-
-        return redirect()
-            ->route('products.index')
-            ->with('success', "Product \"{$name}\" was deleted.");
-    }
-
-    /**
-     * Shared validation rules for store() and update().
-     */
-    private function validateProduct(Request $request, ?int $ignoreId = null): array
-    {
-        return $request->validate([
+        $rules = [
             'name' => ['required', 'string', 'max:255'],
             'sku' => [
                 'required', 'string', 'max:50',
                 'unique:products,sku' . ($ignoreId ? ",{$ignoreId}" : ''),
             ],
             'description' => ['nullable', 'string'],
-            'category' => ['required', 'string', 'max:100'],
+            'category_id' => ['required', 'integer', 'exists:categories,id'],
+            'brand_id' => ['nullable', 'integer', 'exists:brands,id'],
             'quantity' => ['required', 'integer', 'min:0'],
             'reorder_level' => ['required', 'integer', 'min:0'],
             'unit_price' => ['required', 'numeric', 'min:0'],
             'supplier' => ['nullable', 'string', 'max:255'],
-        ], [
+        ];
+
+        if (! $withQuantity) {
+            unset($rules['quantity']);
+        }
+
+        return $request->validate($rules, [
             'sku.unique' => 'That SKU is already in use by another product.',
+            'category_id.required' => 'Choose a category for this product.',
+            'category_id.exists' => 'That category no longer exists.',
+            'brand_id.exists' => 'That brand no longer exists.',
             'quantity.min' => 'Quantity cannot be negative.',
             'reorder_level.min' => 'Reorder level cannot be negative.',
             'unit_price.min' => 'Unit price cannot be negative.',

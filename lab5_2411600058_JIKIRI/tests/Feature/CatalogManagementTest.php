@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Models\Brand;
 use App\Models\Category;
-use App\Models\InventoryTransaction;
 use App\Models\Product;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -149,7 +148,7 @@ class CatalogManagementTest extends TestCase
         $this->assertModelExists($admin);
     }
 
-    public function test_product_requires_a_category_and_records_stock_movements(): void
+    public function test_product_requires_a_category(): void
     {
         $user = User::factory()->create();
         $category = Category::create(['name' => 'Beverages']);
@@ -163,18 +162,17 @@ class CatalogManagementTest extends TestCase
             'quantity' => 5, 'reorder_level' => 2, 'unit_price' => 1,
         ])->assertRedirect('/products');
 
-        $product = Product::where('sku', 'INV-200')->firstOrFail();
-        $this->assertDatabaseHas('inventory_transactions', [
-            'product_id' => $product->id, 'user_id' => $user->id, 'type' => 'stock_in', 'quantity' => 5,
+        $this->assertDatabaseHas('products', [
+            'sku' => 'INV-200', 'category_id' => $category->id, 'quantity' => 5,
         ]);
-
-        $this->assertSame(1, InventoryTransaction::where('product_id', $product->id)->count());
     }
 
-    public function test_editing_a_product_does_not_change_its_quantity(): void
+    public function test_editing_a_product_updates_its_quantity_and_removes_stock_adjustment_ui(): void
     {
         $user = User::factory()->create();
         $product = $this->product(['quantity' => 10]);
+
+        $this->actingAs($user)->get("/products/{$product->id}/edit")->assertOk()->assertDontSee('Adjust Stock');
 
         $this->actingAs($user)->put("/products/{$product->id}", [
             'name' => 'Renamed Rice', 'sku' => 'INV-100', 'category_id' => $product->category_id,
@@ -182,61 +180,18 @@ class CatalogManagementTest extends TestCase
         ])->assertRedirect('/products');
 
         $this->assertSame('Renamed Rice', $product->fresh()->name);
-        $this->assertSame(10, $product->fresh()->quantity);
+        $this->assertSame(999, $product->fresh()->quantity);
     }
 
-    public function test_stock_in_and_stock_out_adjust_quantity_and_log_the_movement(): void
+    public function test_product_quantity_must_not_be_negative_when_updated(): void
     {
         $user = User::factory()->create();
         $product = $this->product(['quantity' => 10]);
 
-        $this->actingAs($user)->get("/products/{$product->id}/edit")->assertOk()->assertSee('Adjust Stock');
-
-        $this->actingAs($user)->post("/products/{$product->id}/adjust-stock", [
-            'type' => 'stock_in', 'quantity' => 5, 'reference' => 'Delivery INV-1042',
-        ])->assertRedirect("/products/{$product->id}/edit")->assertSessionHas('success');
-        $this->assertSame(15, $product->fresh()->quantity);
-
-        $this->actingAs($user)->post("/products/{$product->id}/adjust-stock", [
-            'type' => 'stock_out', 'quantity' => 4, 'reference' => '',
-        ])->assertSessionHasNoErrors();
-        $this->assertSame(11, $product->fresh()->quantity);
-
-        $this->assertDatabaseHas('inventory_transactions', [
-            'product_id' => $product->id, 'user_id' => $user->id, 'type' => 'stock_in',
-            'quantity' => 5, 'reference' => 'Delivery INV-1042',
-        ]);
-        $this->assertDatabaseHas('inventory_transactions', [
-            'product_id' => $product->id, 'type' => 'stock_out', 'quantity' => 4, 'reference' => 'Manual adjustment',
-        ]);
-    }
-
-    public function test_stock_out_cannot_exceed_the_quantity_on_hand(): void
-    {
-        $user = User::factory()->create();
-        $product = $this->product(['quantity' => 3]);
-
-        $this->actingAs($user)->post("/products/{$product->id}/adjust-stock", [
-            'type' => 'stock_out', 'quantity' => 4,
+        $this->actingAs($user)->put("/products/{$product->id}", [
+            'name' => 'Rice', 'sku' => 'INV-100', 'category_id' => $product->category_id,
+            'quantity' => -1, 'reorder_level' => 5, 'unit_price' => 2,
         ])->assertSessionHasErrors('quantity');
-
-        $this->assertSame(3, $product->fresh()->quantity);
-        $this->assertSame(0, InventoryTransaction::count());
-    }
-
-    public function test_stock_adjustment_is_validated(): void
-    {
-        $user = User::factory()->create();
-        $product = $this->product();
-
-        foreach ([
-            [[], ['type', 'quantity']],
-            [['type' => 'sideways', 'quantity' => 1], ['type']],
-            [['type' => 'stock_in', 'quantity' => 0], ['quantity']],
-            [['type' => 'stock_in', 'quantity' => 'abc'], ['quantity']],
-        ] as [$data, $errors]) {
-            $this->actingAs($user)->post("/products/{$product->id}/adjust-stock", $data)->assertSessionHasErrors($errors);
-        }
 
         $this->assertSame(10, $product->fresh()->quantity);
     }

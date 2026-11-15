@@ -4,9 +4,7 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -16,13 +14,15 @@ class User extends Authenticatable
     use HasFactory, Notifiable;
 
     public const ROLE_ADMIN = 'admin';
-    public const ROLE_MANAGER = 'manager';
     public const ROLE_STAFF = 'staff';
-
+    public const ROLES = [self::ROLE_ADMIN, self::ROLE_STAFF];
+    
+    public function isAdmin(): bool
+    {
+        return $this->role === self::ROLE_ADMIN;
+    }
     /**
      * The attributes that are mass assignable.
-     * NOTE: 'role' is deliberately NOT here, so nobody can self-promote
-     * to admin through the register form.
      *
      * @var list<string>
      */
@@ -30,6 +30,7 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'role',
     ];
 
     /**
@@ -55,25 +56,4 @@ class User extends Authenticatable
         ];
     }
 
-    /** Every stock movement this user recorded (accountability). */
-    public function inventoryTransactions(): HasMany
-    {
-        return $this->hasMany(InventoryTransaction::class);
-    }
-
-    public function isAdmin(): bool
-    {
-        return $this->role === self::ROLE_ADMIN;
-    }
-
-    public function isManager(): bool
-    {
-        return $this->role === self::ROLE_MANAGER;
-    }
-
-    /** Admins and managers receive low-stock alerts. */
-    public function scopeAlertRecipients(Builder $query): Builder
-    {
-        return $query->whereIn('role', [self::ROLE_ADMIN, self::ROLE_MANAGER]);
-    }
 }

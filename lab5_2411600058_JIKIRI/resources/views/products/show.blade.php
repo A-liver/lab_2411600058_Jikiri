@@ -29,29 +29,6 @@
             </div>
         </div>
 
-        <div class="card chart-card mt-3">
-            <div class="card-body">
-                <h6 class="mb-3">Recent Stock Movements</h6>
-                <div class="table-responsive">
-                    <table class="table table-sm mb-0">
-                        <thead><tr><th>Date</th><th>Type</th><th>Qty</th><th>Reference</th><th>By</th></tr></thead>
-                        <tbody>
-                            @forelse ($transactions as $t)
-                                <tr>
-                                    <td>{{ $t->created_at->format('Y-m-d H:i') }}</td>
-                                    <td>{{ $t->type === 'stock_in' ? 'Stock In' : 'Stock Out' }}</td>
-                                    <td>{{ $t->quantity }}</td>
-                                    <td>{{ $t->reference }}</td>
-                                    <td>{{ $t->user?->name }}</td>
-                                </tr>
-                            @empty
-                                <tr><td colspan="5" class="text-center text-muted py-3">No stock movements recorded yet.</td></tr>
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
     </div>
 
     <div class="col-md-4">

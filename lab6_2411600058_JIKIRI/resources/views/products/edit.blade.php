@@ -4,7 +4,7 @@
 @section('page-title', 'Edit Product')
 
 @section('content')
-<div class="card chart-card">
+<div class="card chart-card mb-4">
     <div class="card-body">
         <form method="POST" action="{{ route('products.update', $product) }}">
             @csrf
@@ -17,4 +17,5 @@
         </form>
     </div>
 </div>
+
 @endsection

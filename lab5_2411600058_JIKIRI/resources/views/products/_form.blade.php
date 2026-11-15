@@ -55,15 +55,9 @@
         @error('unit_price') <div class="text-danger small mt-1">{{ $message }}</div> @enderror
     </div>
     <div class="col-md-4">
-        @if ($p)
-            <label for="quantity_display" class="form-label">Quantity in Stock</label>
-            <input type="text" id="quantity_display" value="{{ $p->quantity }}" class="form-control" readonly aria-describedby="quantity_help">
-            <div class="form-text" id="quantity_help">Change it with Adjust Stock below.</div>
-        @else
-            <label for="quantity" class="form-label">Opening Quantity</label>
-            <input type="number" min="0" id="quantity" name="quantity" value="{{ old('quantity', 0) }}" class="form-control @error('quantity') is-invalid @enderror" required>
-            @error('quantity') <div class="text-danger small mt-1">{{ $message }}</div> @enderror
-        @endif
+        <label for="quantity" class="form-label">{{ $p ? 'Quantity in Stock' : 'Opening Quantity' }}</label>
+        <input type="number" min="0" id="quantity" name="quantity" value="{{ old('quantity', $p->quantity ?? 0) }}" class="form-control @error('quantity') is-invalid @enderror" required>
+        @error('quantity') <div class="text-danger small mt-1">{{ $message }}</div> @enderror
     </div>
     <div class="col-md-4">
         <label for="reorder_level" class="form-label">Reorder Level</label>

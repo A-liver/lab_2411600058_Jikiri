@@ -1,179 +1,177 @@
-/**
- * Dashboard AJAX polling (module pattern).
- * Fetches stats, low-stock products and recent transactions every 30 seconds
- * and updates the DOM without a page reload.
- */
 (function () {
     'use strict';
 
-    const POLL_INTERVAL_MS = 30000;
-    const API = window.DASHBOARD_API;
+    const cfg = window.DASHBOARD_POLL;
+    if (!cfg) { return; }
 
-    const $ = (id) => document.getElementById(id);
-    const money = (n) => '$' + Number(n).toLocaleString('en-US', {
-        minimumFractionDigits: 2, maximumFractionDigits: 2,
-    });
-    const integer = (n) => String(Math.round(n));
-    const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-    }[c]));
+    const INTERVAL_MS = 30000;
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    const byId = (id) => document.getElementById(id);
+    const whole = (n) => Math.round(n).toLocaleString('en-US');
+    const money = (n) => '₱' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    function el(tag, className, text) {
+        const node = document.createElement(tag);
+        if (className) { node.className = className; }
+        if (text !== undefined) { node.textContent = text; }
+        return node;
+    }
+
+    // Counts from the number on screen to the new one. Skipped when the value is
+    // unchanged or the person has asked their system for reduced motion.
+    function animateNumber(node, to, format) {
+        if (!node) { return; }
+        const shown = parseFloat(node.textContent.replace(/[^0-9.-]/g, ''));
+        const from = Number.isNaN(shown) ? to : shown;
+
+        if (from === to || reduceMotion) {
+            node.textContent = format(to);
+            return;
+        }
+
+        const start = performance.now();
+        const step = (now) => {
+            const t = Math.min((now - start) / 500, 1);
+            node.textContent = format(from + (to - from) * t);
+            if (t < 1) { requestAnimationFrame(step); }
+        };
+        requestAnimationFrame(step);
+    }
+
+    function renderStats(d) {
+        animateNumber(byId('invTotalProducts'), d.total_products, whole);
+        animateNumber(byId('invTotalValue'), d.total_value, money);
+        animateNumber(byId('invLowStock'), d.low_stock, whole);
+        animateNumber(byId('invOutOfStock'), d.out_of_stock, whole);
+
+        byId('invLowStock').closest('.stat-card').classList.toggle('is-low', d.low_stock > 0);
+        byId('invOutOfStock').closest('.stat-card').classList.toggle('is-out', d.out_of_stock > 0);
+
+    }
+
+    function renderAlert(payload) {
+        const box = byId('lowStockAlert');
+        const items = payload.data;
+        const total = payload.meta.total;
+
+        const signature = JSON.stringify([total, items.map((p) => [p.id, p.quantity, p.reorder_level])]);
+        if (box.dataset.signature === signature) { return; }
+        box.dataset.signature = signature;
+
+        box.replaceChildren();
+        if (total === 0) { return; }
+
+        const alert = el('div', 'alert alert-warning d-flex');
+        const icon = el('i', 'bi bi-exclamation-triangle-fill fs-4 me-3 flex-shrink-0');
+        icon.setAttribute('aria-hidden', 'true');
+
+        const body = el('div');
+        body.append(el('strong', '', total + ' item(s) need attention'));
+
+        const list = el('ul', 'mb-0 mt-2 small');
+        items.forEach((p) => {
+            const out = p.status === 'out-of-stock';
+            const link = el('a', 'fw-bold' + (out ? ' text-danger' : ''), p.name);
+            link.href = p.url;
+            const li = el('li');
+            li.append(link, (out ? ': out of stock' : ': ' + p.quantity + ' left') + ' (reorder at ' + p.reorder_level + ')');
+            list.append(li);
+        });
+
+        if (total > items.length) {
+            const more = el('a', '', 'and ' + (total - items.length) + ' more in Inventory');
+            more.href = cfg.productsUrl;
+            const li = el('li');
+            li.append(more);
+            list.append(li);
+        }
+
+        body.append(list);
+        alert.append(icon, body);
+        box.append(alert);
+    }
+
+    function renderRecent(payload) {
+        const body = byId('recentTransactionsBody');
+        body.replaceChildren();
+
+        if (payload.data.length === 0) {
+            const td = el('td', 'text-center text-muted py-3', 'No movements recorded yet.');
+            td.colSpan = 5;
+            const tr = el('tr');
+            tr.append(td);
+            body.append(tr);
+            return;
+        }
+
+        payload.data.forEach((t) => {
+            const badge = el('span', 'badge text-bg-' + t.type_color, t.type_label);
+            const typeCell = el('td');
+            typeCell.append(badge);
+
+            const tr = el('tr');
+            tr.append(
+                el('td', '', t.date),
+                el('td', '', t.product.name),
+                typeCell,
+                el('td', 'text-end', (t.change > 0 ? '+' : '') + t.change),
+                el('td', 'text-end', t.balance_after === null ? '-' : String(t.balance_after))
+            );
+            body.append(tr);
+        });
+    }
+
+    function stamp(date) {
+        byId('lastUpdated').textContent = 'Updated ' +
+            date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+
+    function showError(message) {
+        const node = byId('pollError');
+        node.textContent = message;
+        node.hidden = !message;
+    }
+
+    async function getJson(url) {
+        const response = await fetch(url, {
+            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin',
+        });
+        if (response.status === 401) { throw new Error('session'); }
+        if (!response.ok) { throw new Error('http ' + response.status); }
+        return response.json();
+    }
 
     let timer = null;
     let inFlight = false;
 
-    async function fetchJson(url) {
-        const res = await fetch(url, {
-            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-            credentials: 'same-origin',
-        });
-
-        if (res.status === 401 || res.status === 419) {
-            window.location.reload(); // session expired -> login page
-            throw new Error('Session expired');
-        }
-        if (!res.ok) {
-            throw new Error(`HTTP ${res.status} for ${url}`);
-        }
-        return res.json();
-    }
-
-    /** Count the number up/down so changes are easy to notice. */
-    function animateNumber(el, to, format) {
-        if (!el) return;
-
-        const current = el.dataset.value !== undefined
-            ? parseFloat(el.dataset.value)
-            : parseFloat(el.textContent.replace(/[^0-9.-]/g, ''));
-        const from = Number.isNaN(current) ? 0 : current;
-
-        el.dataset.value = to;
-        if (from === to) return;
-
-        el.classList.add('stat-flash');
-        setTimeout(() => el.classList.remove('stat-flash'), 900);
-
-        const duration = 600;
-        const start = performance.now();
-
-        function frame(now) {
-            const t = Math.min((now - start) / duration, 1);
-            const eased = 1 - Math.pow(1 - t, 3);
-            el.textContent = format(from + (to - from) * eased);
-            if (t < 1) {
-                requestAnimationFrame(frame);
-            } else {
-                el.textContent = format(to);
-            }
-        }
-        requestAnimationFrame(frame);
-    }
-
-    function renderStats(s) {
-        animateNumber($('invTotalProducts'), s.total_products, integer);
-        animateNumber($('invTotalValue'), s.inventory_value, money);
-        animateNumber($('invLowStock'), s.low_stock, integer);
-        animateNumber($('invOutOfStock'), s.out_of_stock, integer);
-    }
-
-    function renderLowStock(items) {
-        const box = $('lowStockAlert');
-        if (!box) return;
-
-        if (!items.length) {
-            box.innerHTML = '';
-            return;
-        }
-
-        const out = items.filter((p) => p.quantity <= 0);
-        const low = items.filter((p) => p.quantity > 0);
-
-        const rows = [
-            ...out.map((p) => `<li><strong class="text-danger"><a href="${escapeHtml(p.url)}" class="text-danger">${escapeHtml(p.name)}</a></strong> &mdash; <strong>OUT OF STOCK</strong> (reorder at ${p.reorder_level})</li>`),
-            ...low.map((p) => `<li><strong><a href="${escapeHtml(p.url)}">${escapeHtml(p.name)}</a></strong> &mdash; ${p.quantity} left (reorder at ${p.reorder_level})</li>`),
-        ].join('');
-
-        box.innerHTML = `
-            <div class="alert alert-warning alert-dismissible fade show d-flex" role="alert">
-                <i class="bi bi-exclamation-triangle-fill fs-4 me-3 flex-shrink-0"></i>
-                <div>
-                    <strong>${items.length} item(s) need attention</strong>
-                    <ul class="mb-0 mt-2 small">${rows}</ul>
-                </div>
-                <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert" aria-label="Close"></button>
-            </div>`;
-    }
-
-    function renderRecentTransactions(rows) {
-        const body = $('recentTransactionsBody');
-        if (!body) return;
-
-        if (!rows.length) {
-            body.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No transactions yet.</td></tr>';
-            return;
-        }
-
-        body.innerHTML = rows.map((t) => `
-            <tr>
-                <td>${escapeHtml(t.created_at_display)}</td>
-                <td><a href="${escapeHtml(t.product.url)}">${escapeHtml(t.product.name)}</a></td>
-                <td><span class="badge bg-${escapeHtml(t.type_color)} ${t.type_color === 'warning' ? 'text-dark' : ''}">${escapeHtml(t.type_label)}</span></td>
-                <td class="text-end fw-bold ${t.quantity < 0 ? 'text-danger' : 'text-success'}">${t.quantity > 0 ? '+' : ''}${t.quantity}</td>
-                <td>${escapeHtml(t.user)}</td>
-            </tr>`).join('');
-    }
-
-    function setStatus(state) {
-        const badge = $('pollStatus');
-        if (!badge) return;
-
-        const map = {
-            live: ['bg-success', 'Live'],
-            loading: ['bg-secondary', 'Updating...'],
-            error: ['bg-danger', 'Offline - retrying'],
-        };
-        badge.className = 'badge ' + map[state][0];
-        badge.textContent = map[state][1];
-    }
-
-    async function refresh() {
-        if (inFlight) return;
+    async function poll() {
+        if (inFlight) { return; }
         inFlight = true;
-        setStatus('loading');
 
         try {
             const [stats, low, recent] = await Promise.all([
-                fetchJson(API.stats),
-                fetchJson(API.lowStock),
-                fetchJson(API.recent),
+                getJson(cfg.stats), getJson(cfg.lowStock), getJson(cfg.recent),
             ]);
-
             renderStats(stats.data);
-            renderLowStock(low.data);
-            renderRecentTransactions(recent.data);
-
-            $('lastUpdated').textContent = stats.meta.generated_at_display;
-            setStatus('live');
-        } catch (err) {
-            // Graceful failure: keep the old numbers on screen and try again next tick.
-            console.error('Dashboard refresh failed:', err);
-            setStatus('error');
+            renderAlert(low);
+            renderRecent(recent);
+            stamp(new Date(stats.meta.generated_at));
+            showError('');
+        } catch (error) {
+            if (error.message === 'session') {
+                showError('Your session expired. Log in again to keep this page updating.');
+                clearInterval(timer);
+            } else {
+                showError('Could not refresh. Showing the last data and trying again in 30 seconds.');
+            }
         } finally {
             inFlight = false;
         }
     }
 
-    function start() {
-        timer = setInterval(() => {
-            if (!document.hidden) refresh();   // don't poll a background tab
-        }, POLL_INTERVAL_MS);
-
-        document.addEventListener('visibilitychange', () => {
-            if (!document.hidden) refresh();   // catch up when the tab is shown again
-        });
-
-        const btn = $('refreshNow');
-        if (btn) btn.addEventListener('click', refresh);
-    }
-
-    document.addEventListener('DOMContentLoaded', start);
+    stamp(new Date());
+    timer = setInterval(() => { if (!document.hidden) { poll(); } }, INTERVAL_MS);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) { poll(); } });
 })();

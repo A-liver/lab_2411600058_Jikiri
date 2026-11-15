@@ -1,4 +1,5 @@
 <x-guest-layout>
+    <x-slot name="subtitle">Sign in to your account</x-slot>
     @if (session('status'))
         <div class="alert alert-success">{{ session('status') }}</div>
     @endif

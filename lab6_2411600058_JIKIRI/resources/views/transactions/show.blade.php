@@ -4,87 +4,85 @@
 @section('page-title', 'Transaction #' . $transaction->id)
 
 @section('content')
-@php $signed = $transaction->signed_quantity; @endphp
 
-<div class="row g-3">
-    <div class="col-md-8">
-        <div class="card chart-card mb-3">
-            <div class="card-header fw-bold">Transaction Details</div>
+<div class="row g-3 mb-4">
+    <div class="col-lg-4">
+        <div class="card h-100">
+            <div class="card-header"><h5 class="mb-0">Transaction</h5></div>
             <div class="card-body">
-                <dl class="row mb-0">
-                    <dt class="col-sm-4">Date / Time</dt>
-                    <dd class="col-sm-8">{{ $transaction->created_at->format('Y-m-d H:i:s') }}</dd>
-                    <dt class="col-sm-4">Type</dt>
-                    <dd class="col-sm-8">
-                        <span class="badge bg-{{ $transaction->type_color }} {{ $transaction->type_color === 'warning' ? 'text-dark' : '' }}">
-                            {{ $transaction->type_label }}
-                        </span>
-                    </dd>
-                    <dt class="col-sm-4">Quantity</dt>
-                    <dd class="col-sm-8 fw-bold {{ $signed < 0 ? 'text-danger' : 'text-success' }}">
-                        {{ $signed > 0 ? '+' : '' }}{{ $signed }}
-                    </dd>
-                    <dt class="col-sm-4">Balance After</dt>
-                    <dd class="col-sm-8">{{ $transaction->balance_after ?? '—' }}</dd>
-                    <dt class="col-sm-4">Reference</dt>
-                    <dd class="col-sm-8">{{ $transaction->reference_number ?: '—' }}</dd>
-                    <dt class="col-sm-4">Reason</dt>
-                    <dd class="col-sm-8">
-                        {{ \App\Models\InventoryTransaction::ADJUSTMENT_REASONS[$transaction->reason] ?? ($transaction->reason ?: '—') }}
-                    </dd>
-                    <dt class="col-sm-4">Notes</dt>
-                    <dd class="col-sm-8">{{ $transaction->notes ?: '—' }}</dd>
-                </dl>
-            </div>
-        </div>
-
-        <div class="card chart-card">
-            <div class="card-header fw-bold">Product</div>
-            <div class="card-body">
-                <dl class="row mb-0">
-                    <dt class="col-sm-4">Name</dt>
-                    <dd class="col-sm-8"><a href="{{ route('products.show', $transaction->product) }}">{{ $transaction->product->name }}</a></dd>
-                    <dt class="col-sm-4">SKU</dt>
-                    <dd class="col-sm-8">{{ $transaction->product->sku }}</dd>
-                    <dt class="col-sm-4">Current Stock</dt>
-                    <dd class="col-sm-8">
-                        {{ $transaction->product->quantity }}
-                        <span class="badge bg-{{ $transaction->product->stock_status_color }} {{ $transaction->product->stock_status_color === 'warning' ? 'text-dark' : '' }}">
-                            {{ $transaction->product->stock_status_label }}
-                        </span>
-                    </dd>
+                <dl class="mb-0">
+                    <dt>Type</dt>
+                    <dd><span class="badge text-bg-{{ $transaction->type_color }}">{{ $transaction->type_label }}</span></dd>
+                    <dt>Quantity</dt>
+                    <dd>{{ sprintf('%+d', $transaction->delta()) }}</dd>
+                    <dt>Balance after</dt>
+                    <dd>{{ $transaction->balance_after ?? '-' }}</dd>
+                    <dt>Reference</dt>
+                    <dd>{{ $transaction->reference ?? '-' }}</dd>
+                    <dt>Notes</dt>
+                    <dd>{{ $transaction->notes ?? '-' }}</dd>
+                    <dt>Recorded</dt>
+                    <dd class="mb-0">{{ $transaction->created_at->format('Y-m-d H:i:s') }}</dd>
                 </dl>
             </div>
         </div>
     </div>
 
-    <div class="col-md-4">
-        <div class="card chart-card mb-3">
-            <div class="card-header fw-bold">Recorded By</div>
+    <div class="col-lg-4">
+        <div class="card h-100">
+            <div class="card-header"><h5 class="mb-0">Product</h5></div>
             <div class="card-body">
-                @if ($transaction->user)
-                    <div class="fw-bold">{{ $transaction->user->name }}</div>
-                    <div class="text-muted">{{ $transaction->user->email }}</div>
-                    <span class="badge bg-secondary mt-1">{{ ucfirst($transaction->user->role) }}</span>
+                <dl class="mb-3">
+                    <dt>Name</dt>
+                    <dd>{{ $transaction->product->name }}</dd>
+                    <dt>SKU</dt>
+                    <dd>{{ $transaction->product->sku }}</dd>
+                    <dt>Category</dt>
+                    <dd>{{ $transaction->product->category?->name ?? '-' }}</dd>
+                    <dt>Stock now</dt>
+                    <dd class="mb-0">{{ $transaction->product->quantity }}</dd>
+                </dl>
+                @if ($transaction->product->trashed())
+                    <span class="text-muted small">This product was deleted.</span>
                 @else
-                    <span class="text-muted">System / deleted user</span>
+                    <a href="{{ route('products.show', $transaction->product) }}" class="btn btn-sm btn-outline-primary">View product</a>
                 @endif
             </div>
         </div>
+    </div>
 
-        <div class="card chart-card">
-            <div class="card-body d-flex flex-column gap-2">
-                <a href="{{ route('transactions.index') }}" class="btn btn-outline-secondary">Back to List</a>
-                @can('admin')
-                    <form method="POST" action="{{ route('transactions.destroy', $transaction) }}"
-                          onsubmit="return confirm('Delete this transaction and reverse its stock change?');">
-                        @csrf
-                        @method('DELETE')
-                        <button type="submit" class="btn btn-outline-danger w-100">Delete</button>
-                    </form>
-                @endcan
+    <div class="col-lg-4">
+        <div class="card h-100">
+            <div class="card-header"><h5 class="mb-0">Recorded by</h5></div>
+            <div class="card-body">
+                @if ($transaction->user)
+                    <dl class="mb-0">
+                        <dt>Name</dt>
+                        <dd>{{ $transaction->user->name }}</dd>
+                        <dt>Email</dt>
+                        <dd>{{ $transaction->user->email }}</dd>
+                        <dt>Role</dt>
+                        <dd class="mb-0">{{ ucfirst($transaction->user->role) }}</dd>
+                    </dl>
+                @else
+                    <p class="text-muted mb-0">System entry (no user account recorded).</p>
+                @endif
             </div>
         </div>
     </div>
 </div>
+
+<div class="d-flex gap-2">
+    <a href="{{ route('transactions.index') }}" class="btn btn-outline-secondary">Back to list</a>
+    @can('manage-inventory')
+        <form method="POST" action="{{ route('transactions.destroy', $transaction) }}"
+              data-confirm="Reverse this transaction? A new opposite entry will be recorded."
+              onsubmit="return confirm(this.dataset.confirm);">
+            @csrf
+            @method('DELETE')
+            <button type="submit" class="btn btn-outline-danger">Reverse transaction</button>
+        </form>
+    @endcan
+</div>
+
 @endsection

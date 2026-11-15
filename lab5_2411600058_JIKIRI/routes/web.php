@@ -17,7 +17,6 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
     Route::get('/products-export', [ProductController::class, 'export'])->name('products.export');
-    Route::post('/products/{product}/adjust-stock', [ProductController::class, 'adjustStock'])->name('products.adjust-stock');
     Route::resource('products', ProductController::class);
 
     Route::resource('categories', CategoryController::class)->except('show');

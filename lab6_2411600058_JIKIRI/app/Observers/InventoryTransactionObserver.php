@@ -2,85 +2,61 @@
 
 namespace App\Observers;
 
-use App\Events\LowStockDetected;
 use App\Exceptions\InsufficientStockException;
 use App\Models\InventoryTransaction;
 use App\Models\Product;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
+use LogicException;
+use App\Models\User;
+use App\Notifications\LowStockNotification;
+use Illuminate\Support\Facades\Notification;
 
 class InventoryTransactionObserver
 {
-    /**
-     * BEFORE the row is saved: validate and take a snapshot.
-     * We use `creating` (not only `created`) so an invalid movement is
-     * rejected before anything is written.
-     */
+    /** Runs BEFORE the insert, so a bad movement never reaches the table. */
     public function creating(InventoryTransaction $tx): void
     {
-        $this->assertQuantityIsValid($tx);
+        if (DB::transactionLevel() === 0) {
+            throw new LogicException('Use InventoryTransaction::record() so the movement runs inside a DB transaction.');
+        }
 
-        // Accountability: default to whoever is logged in.
-        $tx->user_id ??= Auth::id();
+        $isAdjustment = $tx->type === InventoryTransaction::TYPE_ADJUSTMENT;
 
-        $product = Product::lockForUpdate()->findOrFail($tx->product_id);
-        $newQuantity = $product->quantity + $tx->signed_quantity;
+        if ($tx->quantity === 0 || (! $isAdjustment && $tx->quantity < 0)) {
+            throw new InvalidArgumentException('Invalid stock movement quantity.');
+        }
+
+        // lock the row so two simultaneous requests cannot both pass the check
+        $product = Product::whereKey($tx->product_id)->lockForUpdate()->firstOrFail();
+
+        $newQuantity = $product->quantity + $tx->delta();
 
         if ($newQuantity < 0) {
-            throw new InsufficientStockException($product, abs($tx->signed_quantity));
+            throw new InsufficientStockException($product, abs($tx->delta()));
         }
 
-        $tx->balance_after = $newQuantity; // stock level after this movement
+        $tx->balance_after = $newQuantity; // feeds the running-balance column later
     }
 
-    /**
-     * AFTER the row is saved: update the product quantity and check alerts.
-     */
+    /** Runs AFTER the insert, still inside the same transaction. */
     public function created(InventoryTransaction $tx): void
     {
-        DB::transaction(function () use ($tx) {
-            $product = Product::lockForUpdate()->findOrFail($tx->product_id);
+        Product::whereKey($tx->product_id)->update(['quantity' => $tx->balance_after]);
 
-            $newQuantity = $product->quantity + $tx->signed_quantity;
+        $product = Product::find($tx->product_id);
+        $previous = $tx->balance_after - $tx->delta();
 
-            if ($newQuantity < 0) {
-                throw new InsufficientStockException($product, abs($tx->signed_quantity));
-            }
+        // alert only on the move from "fine" to "at or below reorder level"
+        if ($previous > $product->reorder_level && $product->quantity <= $product->reorder_level) {
+            $recipients = User::where('role', User::ROLE_ADMIN)->get();
+            $notification = new LowStockNotification($product);
 
-            $product->quantity = $newQuantity;
+            Notification::sendNow($recipients, $notification, ['database']);
 
-            // Duplicate-alert guard:
-            //  - stock recovered above reorder level -> clear the marker
-            //  - stock DROPPED to/below reorder level and no alert sent yet -> alert once
-            $sendAlert = false;
-
-            if (! $product->isLowStock()) {
-                $product->last_low_stock_notified_at = null;
-            } elseif ($tx->signed_quantity < 0 && $product->last_low_stock_notified_at === null) {
-                $product->last_low_stock_notified_at = now();
-                $sendAlert = true;
-            }
-
-            $product->save();
-
-            if ($sendAlert) {
-                LowStockDetected::dispatch($product); // listener is queued
-            }
-        });
-    }
-
-    private function assertQuantityIsValid(InventoryTransaction $tx): void
-    {
-        if ($tx->type === InventoryTransaction::TYPE_ADJUSTMENT) {
-            if ((int) $tx->quantity === 0) {
-                throw new InvalidArgumentException('An adjustment cannot be zero.');
-            }
-            return;
-        }
-
-        if ((int) $tx->quantity <= 0) {
-            throw new InvalidArgumentException('Quantity must be greater than zero for stock in/out.');
+            DB::afterCommit(function () use ($recipients, $notification): void {
+                Notification::sendNow($recipients, $notification, ['mail']);
+            });
         }
     }
 }

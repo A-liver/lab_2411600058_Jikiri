@@ -2,69 +2,84 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\StoreStockAdjustmentRequest;
 use App\Models\InventoryTransaction;
 use App\Models\Product;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class StockAdjustmentController extends Controller
 {
-    public function create(Request $request): View
-    {
-        $products = Product::orderBy('name')->get(['id', 'name', 'sku']);
-        $reasons = InventoryTransaction::ADJUSTMENT_REASONS;
-        $selectedProduct = $request->query('product_id');
+    public const REASONS = [
+        'count' => 'Physical count discrepancy',
+        'damaged' => 'Damaged goods',
+        'loss' => 'Theft or loss',
+        'system_error' => 'System error',
+    ];
 
-        return view('adjustments.create', compact('products', 'reasons', 'selectedProduct'));
+    public function create(): View
+    {
+        return view('adjustments.create', [
+            'products' => Product::orderBy('name')->get(['id', 'name', 'sku']),
+            'reasons' => self::REASONS,
+        ]);
     }
 
-    public function store(StoreStockAdjustmentRequest $request): RedirectResponse
+    public function store(Request $request): RedirectResponse
     {
-        $data = $request->validated();
-        $physical = (int) $data['physical_count'];
+        $validated = $request->validate([
+            'product_id' => ['required', 'integer', Rule::exists('products', 'id')->whereNull('deleted_at')],
+            'system_quantity' => ['required', 'integer', 'min:0'],
+            'physical_count' => ['required', 'integer', 'min:0', 'max:1000000'],
+            'reason' => ['required', Rule::in(array_keys(self::REASONS))],
+            'notes' => ['nullable', 'string', 'max:1000'],
+        ], [
+            'system_quantity.required' => 'Choose a product and wait for its system quantity to load.',
+            'physical_count.required' => 'Enter the number you counted.',
+        ]);
 
-        // The difference is calculated on the server, under a row lock, from the
-        // CURRENT system quantity. We never trust the number the browser displayed,
-        // because stock may have changed since the form was opened.
-        $transaction = DB::transaction(function () use ($data, $physical) {
-            $product = Product::lockForUpdate()->findOrFail($data['product_id']);
-            $difference = $physical - $product->quantity;
+        $outcome = DB::transaction(function () use ($validated, $request) {
+            // lock first, then compare: the browser's number may already be out of date
+            $product = Product::whereKey($validated['product_id'])->lockForUpdate()->firstOrFail();
+
+            if ((int) $validated['system_quantity'] !== $product->quantity) {
+                return ['stale' => $product->quantity];
+            }
+
+            $difference = (int) $validated['physical_count'] - $product->quantity;
 
             if ($difference === 0) {
-                return null;
+                return ['same' => true];
             }
 
-            $note = "Physical count {$physical} vs system count {$product->quantity}.";
-            if (! empty($data['notes'])) {
-                $note .= ' ' . $data['notes'];
-            }
-
-            // Observer updates the stock and may fire a low-stock alert.
-            return InventoryTransaction::record([
-                'product_id' => $product->id,
-                'user_id' => auth()->id(),
-                'type' => InventoryTransaction::TYPE_ADJUSTMENT,
-                'quantity' => $difference,               // signed: physical - system
-                'reason' => $data['reason'],
-                'reference_number' => 'ADJ-' . now()->format('YmdHis'),
-                'notes' => $note,
-            ]);
+            return ['transaction' => InventoryTransaction::record(
+                $product,
+                InventoryTransaction::TYPE_ADJUSTMENT,
+                $difference,
+                self::REASONS[$validated['reason']],
+                $validated['notes'] ?? null,
+                $request->user()->id,
+            )];
         });
 
-        if ($transaction === null) {
+        if (isset($outcome['stale'])) {
             return back()->withInput()->withErrors([
-                'physical_count' => 'The physical count matches the system count, so no adjustment was needed.',
+                'physical_count' => "Stock changed while you were counting. The system now shows {$outcome['stale']}. Check your count and submit again.",
             ]);
         }
 
-        $sign = $transaction->quantity > 0 ? '+' : '';
+        if (isset($outcome['same'])) {
+            return back()->withInput()->withErrors([
+                'physical_count' => 'Your count matches the system quantity, so there is nothing to adjust.',
+            ]);
+        }
+
+        $transaction = $outcome['transaction'];
 
         return redirect()
             ->route('transactions.show', $transaction)
-            ->with('success', "Adjustment of {$sign}{$transaction->quantity} recorded for "
-                . "\"{$transaction->product->name}\". New stock: {$transaction->balance_after}.");
+            ->with('success', sprintf('Stock adjusted by %+d. New quantity: %d.', $transaction->quantity, $transaction->balance_after));
     }
 }

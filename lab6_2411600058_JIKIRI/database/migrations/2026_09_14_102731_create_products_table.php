@@ -21,7 +21,6 @@ return new class extends Migration
             $table->unsignedInteger('reorder_level')->default(0);
             $table->decimal('unit_price', 10, 2)->default(0);
             $table->string('supplier')->nullable();
-            $table->timestamp('last_low_stock_notified_at')->nullable(); // duplicate-alert guard
             $table->timestamps();
         });
     }

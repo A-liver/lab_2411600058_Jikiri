@@ -2,33 +2,44 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Product extends Model
 {
+    use SoftDeletes;
+
     protected $fillable = [
         'name',
         'sku',
         'description',
-        'category',
+        'category_id',
+        'brand_id',
         'quantity',
         'reorder_level',
         'unit_price',
         'supplier',
     ];
 
-    // Not mass-assignable: only the alert system touches this.
     protected $casts = [
         'quantity' => 'integer',
         'reorder_level' => 'integer',
         'unit_price' => 'decimal:2',
-        'last_low_stock_notified_at' => 'datetime',
     ];
 
-    // ---------- Relationships ----------
+    public function category(): BelongsTo
+    {
+        return $this->belongsTo(Category::class);
+    }
+
+    public function brand(): BelongsTo
+    {
+        return $this->belongsTo(Brand::class);
+    }
 
     public function transactions(): HasMany
     {
@@ -40,36 +51,31 @@ class Product extends Model
         return $this->hasOne(InventoryTransaction::class)->latestOfMany();
     }
 
-    // ---------- Business logic helpers ----------
-
-    public function isLowStock(): bool
-    {
-        return $this->quantity <= $this->reorder_level;
-    }
-
     public function isOutOfStock(): bool
     {
         return $this->quantity <= 0;
     }
 
-    /**
-     * Slug used by the existing Lab 5 views/controllers:
-     * 'in-stock' | 'low-stock' | 'out-of-stock'
-     */
+    public function isLowStock(): bool
+    {
+        return $this->quantity > 0 && $this->quantity <= $this->reorder_level;
+    }
+
+    /** At or below the reorder level, zero included. Used for alerts. */
+    public function needsReorder(): bool
+    {
+        return $this->quantity <= $this->reorder_level;
+    }
+
     public function getStockStatusAttribute(): string
     {
         if ($this->isOutOfStock()) {
             return 'out-of-stock';
         }
 
-        if ($this->isLowStock()) {
-            return 'low-stock';
-        }
-
-        return 'in-stock';
+        return $this->isLowStock() ? 'low-stock' : 'in-stock';
     }
 
-    /** Human-readable: 'In Stock' | 'Low Stock' | 'Out of Stock' */
     public function getStockStatusLabelAttribute(): string
     {
         return match ($this->stock_status) {
@@ -79,7 +85,6 @@ class Product extends Model
         };
     }
 
-    /** Bootstrap colour class: 'success' | 'warning' | 'danger' */
     public function getStockStatusColorAttribute(): string
     {
         return match ($this->stock_status) {
@@ -89,12 +94,9 @@ class Product extends Model
         };
     }
 
-    // ---------- Query scopes ----------
-
-    /** At or below reorder level (includes out-of-stock). */
     public function scopeLowStock(Builder $query): Builder
     {
-        return $query->whereColumn('quantity', '<=', 'reorder_level');
+        return $query->where('quantity', '>', 0)->whereColumn('quantity', '<=', 'reorder_level');
     }
 
     public function scopeOutOfStock(Builder $query): Builder
@@ -102,8 +104,13 @@ class Product extends Model
         return $query->where('quantity', '<=', 0);
     }
 
-    public function scopeInCategory(Builder $query, string $category): Builder
+    public function scopeInCategory(Builder $query, Category|int $category): Builder
     {
-        return $query->where('category', $category);
+        return $query->where('category_id', $category instanceof Category ? $category->id : $category);
+    }
+    
+    public function scopeAtReorderLevel(Builder $query): Builder
+    {
+        return $query->whereColumn('quantity', '<=', 'reorder_level');
     }
 }
